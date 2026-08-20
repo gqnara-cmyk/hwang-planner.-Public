@@ -1477,7 +1477,7 @@ function renderOverview(trip){
   var bounds = [];
   dayItems.forEach(function(it, idx){
     var icon = L.divIcon({html:'<div class="pin-num">'+(idx+1)+'</div>', className:"", iconSize:[26,26], iconAnchor:[13,13]});
-    var marker = L.marker([it.lat, it.lng], {icon: icon}).addTo(map);
+    var marker = L.marker([it.lat, it.lng], {icon: icon, zIndexOffset: 500}).addTo(map);
     var labelIcon = L.divIcon({html:'<div class="pin-label">'+escapeHtml(it.time)+' · '+escapeHtml(it.name)+'</div>',
       className:"", iconSize:[0,0], iconAnchor:[-16,30]});
     var label = L.marker([it.lat, it.lng], {icon: labelIcon, interactive:false}).addTo(map);
@@ -1508,8 +1508,8 @@ function renderOverview(trip){
   charCurrentMove = cur.move;
   var glyphHtml = getCharHtml(cur.move, walkFrame);
   if(!charMarker){
-    var ci = L.divIcon({html:'<div class="char-marker" id="charGlyph">'+glyphHtml+'</div>', className:"", iconSize:[30,30], iconAnchor:[15,15]});
-    charMarker = L.marker([cur.lat, cur.lng], {icon: ci}).addTo(map);
+    var ci = L.divIcon({html:'<div class="char-marker" id="charGlyph">'+glyphHtml+'</div>', className:"", iconSize:[30,30], iconAnchor:[15,32]});
+    charMarker = L.marker([cur.lat, cur.lng], {icon: ci, zIndexOffset: 1000}).addTo(map);
   } else {
     charMarker.setLatLng([cur.lat, cur.lng]);
     var g = document.getElementById("charGlyph");
@@ -1526,16 +1526,11 @@ function drawRoutes(dayItems, idx){
   for(var i=0;i<dayItems.length-1;i++){
     var a = dayItems[i], b = dayItems[i+1];
     var done = i < idx;
-    fetchOsrmRoute(a, b, function(latlngs, isDone){
-      var line = L.polyline(latlngs, isDone ?
-        {color:"#1b4b7a", weight:4, opacity:.9} :
-        {color:"#9aa7b3", weight:3, opacity:.8, dashArray:"6,8"});
-      (isDone ? routeLayerDone : routeLayerRemain).addLayer(line);
-    }.bind(null, null, done), a, b, done);
+    fetchOsrmRoute(a, b, done);
   }
 }
 var osrmCache = {};
-function fetchOsrmRoute(_a,_b,_cb,a,b,isDone){
+function fetchOsrmRoute(a,b,isDone){
   var key = a.lat+","+a.lng+";"+b.lat+","+b.lng;
   if(osrmCache[key]){ drawLine(osrmCache[key], isDone); return; }
   var url = "https://router.project-osrm.org/route/v1/driving/"+a.lng+","+a.lat+";"+b.lng+","+b.lat+"?overview=full&geometries=geojson";
@@ -1554,10 +1549,13 @@ function fetchOsrmRoute(_a,_b,_cb,a,b,isDone){
     drawLine(coords, isDone);
   });
   function drawLine(coords, isDone){
+    var halo = L.polyline(coords, {color:"#ffffff", weight: isDone?7:6, opacity:.85});
     var line = L.polyline(coords, isDone ?
-      {color:"#1b4b7a", weight:4, opacity:.9} :
-      {color:"#9aa7b3", weight:3, opacity:.8, dashArray:"6,8"});
-    (isDone ? routeLayerDone : routeLayerRemain).addLayer(line);
+      {color:"#1b4b7a", weight:4.5, opacity:1} :
+      {color:"#d9724a", weight:3.5, opacity:1, dashArray:"3,9"});
+    var group = isDone ? routeLayerDone : routeLayerRemain;
+    group.addLayer(halo);
+    group.addLayer(line);
   }
 }
 
