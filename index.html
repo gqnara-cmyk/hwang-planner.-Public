@@ -377,7 +377,13 @@ img{max-width:100%;display:block;}
       <div class="field"><label>시간</label><input type="time" id="itTime"></div>
     </div>
     <div class="field"><label>일정 이름</label><input type="text" id="itName" placeholder="예: 츠키지 시장"></div>
-    <div class="field"><label>지도 검색어 / 주소</label><input type="text" id="itPlace" placeholder="예: 도쿄 츠키지 시장"></div>
+    <div class="field"><label>지도 검색어 / 주소</label>
+      <input type="text" id="itPlace" placeholder="예: 도쿄 츠키지 시장">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+        <span id="itGeoStatus" style="font-size:11.5px;color:var(--sub);flex:1;"></span>
+        <button type="button" id="itGeoRetryBtn" style="font-size:11.5px;font-weight:700;color:var(--navy2);background:var(--bg);padding:6px 10px;border-radius:8px;">📍 위치 다시 찾기</button>
+      </div>
+    </div>
     <div class="field"><label>구글맵 링크 (선택)</label><input type="url" id="itMapUrl" placeholder="https://maps.google.com/..."></div>
     <div class="field"><label>이동 방법</label>
       <div class="chiprow" id="moveChips"></div></div>
@@ -486,6 +492,10 @@ img{max-width:100%;display:block;}
     <div class="settings-item">
       <div><div class="lbl">캘린더 내보내기</div><div class="desc">전체 일정을 .ics로 저장해요</div></div>
       <button id="setExportIcs">내보내기</button>
+    </div>
+    <div class="settings-item">
+      <div><div class="lbl">좌표 없는 일정 재검색</div><div class="desc">오버뷰에 안 뜨는 일정의 위치를 다시 찾아요</div></div>
+      <button id="setRegeocode">재검색</button>
     </div>
     <div class="settings-item">
       <div><div class="lbl">전체 초기화</div><div class="desc">모든 여행 데이터를 삭제해요</div></div>
@@ -956,6 +966,7 @@ function openItemSheet(id){
   document.getElementById("itAlarm").value = itemDraft.alarm;
   document.getElementById("itMemo").value = itemDraft.memo;
   document.getElementById("itDeleteBtn").classList.toggle("hidden", !it);
+  updateGeoStatus();
 
   renderCatChips();
   renderMoveChips();
@@ -1075,6 +1086,28 @@ function geocode(query, cb){
     })
     .catch(function(){ cb(null); });
 }
+function updateGeoStatus(){
+  var el = document.getElementById("itGeoStatus");
+  if(!el) return;
+  el.textContent = (itemDraft.lat && itemDraft.lng) ? "✅ 위치 확인됨 (오버뷰에 표시돼요)" : "⚠️ 위치 없음 (오버뷰에 안 보여요)";
+  el.style.color = (itemDraft.lat && itemDraft.lng) ? "#2f9e6e" : "#d9724a";
+}
+document.getElementById("itGeoRetryBtn").addEventListener("click", function(){
+  var q = document.getElementById("itPlace").value.trim() || document.getElementById("itName").value.trim();
+  if(!q){ toast("검색어를 입력해주세요"); return; }
+  var btn = document.getElementById("itGeoRetryBtn");
+  btn.textContent = "검색 중...";
+  geocode(q, function(latlng){
+    btn.textContent = "📍 위치 다시 찾기";
+    if(latlng){
+      itemDraft.lat = latlng.lat; itemDraft.lng = latlng.lng;
+      updateGeoStatus();
+      toast("위치를 찾았어요");
+    } else {
+      toast("위치를 찾지 못했어요. 검색어를 조금 더 구체적으로 적어보세요");
+    }
+  });
+});
 
 /* ================= Flight Sheet ================= */
 function openFlightSheet(id){
@@ -1282,6 +1315,31 @@ document.getElementById("setExportIcs").addEventListener("click", function(){
   var trip = activeTrip();
   if(!trip){ toast("여행이 없어요"); return; }
   exportTripIcs(trip);
+});
+document.getElementById("setRegeocode").addEventListener("click", function(){
+  var trip = activeTrip();
+  if(!trip){ toast("여행이 없어요"); return; }
+  var targets = (trip.items||[]).filter(function(it){ return !(it.lat && it.lng) && (it.place || it.name); });
+  if(!targets.length){ toast("모든 일정에 위치가 있어요"); return; }
+  var btn = document.getElementById("setRegeocode");
+  var i = 0, found = 0;
+  btn.textContent = "0/"+targets.length;
+  function next(){
+    if(i >= targets.length){
+      btn.textContent = "재검색";
+      saveState(); render();
+      toast(found+"개 위치를 찾았어요 ("+targets.length+"개 중)");
+      return;
+    }
+    var it = targets[i];
+    geocode(it.place || it.name, function(latlng){
+      if(latlng){ it.lat = latlng.lat; it.lng = latlng.lng; found++; }
+      i++;
+      btn.textContent = i+"/"+targets.length;
+      setTimeout(next, 1100);
+    });
+  }
+  next();
 });
 document.getElementById("setResetAll").addEventListener("click", (function(){
   var armed = false;
