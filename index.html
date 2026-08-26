@@ -1062,7 +1062,7 @@ document.getElementById("itSaveBtn").addEventListener("click", function(){
     toast("저장했어요");
   }
   if(needsGeocode && (itemDraft.place || itemDraft.name)){
-    geocode(itemDraft.place || itemDraft.name, function(latlng){
+    geocode(itemDraft.place, itemDraft.name, function(latlng){
       if(latlng){ itemDraft.lat = latlng.lat; itemDraft.lng = latlng.lng; }
       finishSave();
     });
@@ -1077,7 +1077,10 @@ document.getElementById("itDeleteBtn").addEventListener("click", function(){
   saveState(); closeSheet(); render(); toast("삭제했어요");
 });
 
-function geocode(query, cb){
+function stripKorean(s){
+  return s.replace(/[\uAC00-\uD7A3]+/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+function geocodeRaw(query, cb){
   fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(query))
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -1086,6 +1089,30 @@ function geocode(query, cb){
     })
     .catch(function(){ cb(null); });
 }
+function geocode(place, name, cb){
+  if(typeof name === "function"){ cb = name; name = null; } // backward-compat: geocode(query, cb)
+  var candidates = [];
+  if(place) candidates.push(place);
+  if(name && name !== place) candidates.push(name);
+  tryCandidate(0);
+  function tryCandidate(i){
+    if(i >= candidates.length){ cb(null); return; }
+    var q = candidates[i];
+    geocodeRaw(q, function(res){
+      if(res){ cb(res); return; }
+      var stripped = stripKorean(q);
+      if(stripped && stripped !== q && stripped.length > 1){
+        setTimeout(function(){
+          geocodeRaw(stripped, function(res2){
+            if(res2) cb(res2); else setTimeout(function(){ tryCandidate(i+1); }, 1100);
+          });
+        }, 1100);
+      } else {
+        setTimeout(function(){ tryCandidate(i+1); }, 1100);
+      }
+    });
+  }
+}
 function updateGeoStatus(){
   var el = document.getElementById("itGeoStatus");
   if(!el) return;
@@ -1093,11 +1120,12 @@ function updateGeoStatus(){
   el.style.color = (itemDraft.lat && itemDraft.lng) ? "#2f9e6e" : "#d9724a";
 }
 document.getElementById("itGeoRetryBtn").addEventListener("click", function(){
-  var q = document.getElementById("itPlace").value.trim() || document.getElementById("itName").value.trim();
-  if(!q){ toast("검색어를 입력해주세요"); return; }
+  var place = document.getElementById("itPlace").value.trim();
+  var name = document.getElementById("itName").value.trim();
+  if(!place && !name){ toast("검색어를 입력해주세요"); return; }
   var btn = document.getElementById("itGeoRetryBtn");
   btn.textContent = "검색 중...";
-  geocode(q, function(latlng){
+  geocode(place, name, function(latlng){
     btn.textContent = "📍 위치 다시 찾기";
     if(latlng){
       itemDraft.lat = latlng.lat; itemDraft.lng = latlng.lng;
@@ -1332,11 +1360,11 @@ document.getElementById("setRegeocode").addEventListener("click", function(){
       return;
     }
     var it = targets[i];
-    geocode(it.place || it.name, function(latlng){
+    geocode(it.place, it.name, function(latlng){
       if(latlng){ it.lat = latlng.lat; it.lng = latlng.lng; found++; }
       i++;
       btn.textContent = i+"/"+targets.length;
-      setTimeout(next, 1100);
+      setTimeout(next, 2200);
     });
   }
   next();
